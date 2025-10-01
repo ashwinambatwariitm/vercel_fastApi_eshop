@@ -1,38 +1,52 @@
 # api/index.py
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
 import json
 import os
 
+# -----------------
+# 1. INITIAL SETUP
+# -----------------
+
 app = FastAPI()
 
-# 1. Enable CORS for POST requests from any origin
+# Enable CORS for POST requests from any origin (as required by the prompt)
+# This prevents "Failed to fetch" errors when calling the API from a different domain (like a dashboard).
+origins = ["*"] 
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["POST"],
+    allow_methods=["POST"], # Crucial: Only POST is explicitly allowed
     allow_headers=["*"],
 )
 
-# 2. Define the expected request body schema
+# -----------------
+# 2. DATA LOADING & SCHEMA
+# -----------------
+
+# Define the expected request body schema for Pydantic validation
 class LatencyRequest(BaseModel):
     regions: list[str]
     threshold_ms: float = 180
 
-# Load data once when the function initializes
-# The path is relative to the Vercel project root, but accessed via the function's directory
+# Load data once when the function initializes (cold start)
 try:
-    # '..' navigates from 'api/' back to the project root
+    # Path is relative to the Vercel project root, accessed via the function's directory
     file_path = os.path.join(os.path.dirname(__file__), '..', 'q-vercel-latency.json')
     with open(file_path, 'r') as f:
         LATENCY_DATA = json.load(f)
     DF_FULL = pd.DataFrame(LATENCY_DATA)
 except FileNotFoundError:
     DF_FULL = pd.DataFrame() 
+
+# -----------------
+# 3. METRIC CALCULATION LOGIC
+# -----------------
 
 def calculate_region_metrics(df_region: pd.DataFrame, threshold: float) -> dict:
     """Calculates avg, p95, uptime mean, and breaches for a region's DataFrame."""
@@ -46,9 +60,10 @@ def calculate_region_metrics(df_region: pd.DataFrame, threshold: float) -> dict:
 
     # Calculate metrics
     avg_latency = df_region['latency_ms'].mean()
-    # P95: 95th percentile, using 'higher' interpolation for Vercel's test case consistency
+    # P95: 95th percentile, using 'higher' interpolation for consistency
     p95_latency = df_region['latency_ms'].quantile(0.95, interpolation='higher')
     avg_uptime = df_region['uptime_pct'].mean()
+    # Breaches: Count of records where latency is >= threshold
     breaches = (df_region['latency_ms'] >= threshold).sum()
 
     return {
@@ -58,19 +73,32 @@ def calculate_region_metrics(df_region: pd.DataFrame, threshold: float) -> dict:
         "breaches": int(breaches)
     }
 
-# 3. Define the POST endpoint
+# -----------------
+# 4. API ENDPOINT
+# -----------------
+
+# Define the required POST endpoint
 @app.post("/", response_model=dict)
 async def get_latency_metrics(request_data: LatencyRequest):
+    """
+    Accepts regions and a threshold, and returns per-region metrics
+    (avg_latency, p95_latency, avg_uptime, breaches).
+    """
     regions = request_data.regions
     threshold = request_data.threshold_ms
     
-    # Filter for requested regions
+    # Filter the DataFrame for the requested regions
     df_filtered = DF_FULL[DF_FULL['region'].isin(regions)]
     
-    # Calculate and return results for each region
+    # Calculate and store results for each region
     results = {}
     for region in regions:
         df_region = df_filtered[df_filtered['region'] == region]
         results[region] = calculate_region_metrics(df_region, threshold)
         
     return results
+
+# Optional: Add a simple GET route for health checking in a browser (or use /health)
+@app.get("/")
+def root():
+    return {"message": "POST request required with JSON body to retrieve metrics."}
