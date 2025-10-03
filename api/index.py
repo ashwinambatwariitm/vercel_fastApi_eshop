@@ -103,8 +103,9 @@ async def get_latency_metrics(request_data: LatencyRequest):
     for region in regions:
         df_region = df_filtered[df_filtered['region'] == region]
         results[region] = calculate_region_metrics(df_region, threshold)
-        
-    return results
+    
+    # CHANGE: Wrap the results under a top-level key named "regions"
+    return {"regions": results} 
 
 # Optional: Add a simple GET route for health checking in a browser (or use /health)
 @app.get("/")
