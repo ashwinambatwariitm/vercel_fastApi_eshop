@@ -30,6 +30,7 @@ app.add_middleware(
     # Ensure OPTIONS is allowed for preflight checks
     allow_methods=["POST", "OPTIONS"], 
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # -----------------
