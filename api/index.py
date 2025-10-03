@@ -69,7 +69,7 @@ def calculate_region_metrics(df_region: pd.DataFrame, threshold: float) -> dict:
     # Calculate metrics
     avg_latency = df_region['latency_ms'].mean()
     # P95: 95th percentile, using 'higher' interpolation for consistency
-    p95_latency = df_region['latency_ms'].quantile(0.95, interpolation='higher')
+    p95_latency = df_region['latency_ms'].quantile(0.95) # Uses default 'linear' interpolation
     avg_uptime = df_region['uptime_pct'].mean()
     # Breaches: Count of records where latency is >= threshold
     breaches = (df_region['latency_ms'] >= threshold).sum()
@@ -105,7 +105,7 @@ async def get_latency_metrics(request_data: LatencyRequest):
         results[region] = calculate_region_metrics(df_region, threshold)
     
     # CHANGE: Wrap the results under a top-level key named "regions"
-    return {"regions": results} 
+    return {"regions": results}
 
 # Optional: Add a simple GET route for health checking in a browser (or use /health)
 @app.get("/")
