@@ -17,11 +17,18 @@ app = FastAPI()
 # This prevents "Failed to fetch" errors when calling the API from a different domain (like a dashboard).
 origins = ["*"] 
 
+# api/index.py (CORSMiddleware section)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["POST"], # Crucial: Only POST is explicitly allowed
+    # Use "*" to allow all origins as required
+    allow_origins=["*"], 
+    
+    # REMOVE 'allow_credentials=True' when using allow_origins=["*"]
+    # allow_credentials=True, 
+    
+    # Ensure OPTIONS is allowed for preflight checks
+    allow_methods=["POST", "OPTIONS"], 
     allow_headers=["*"],
 )
 
